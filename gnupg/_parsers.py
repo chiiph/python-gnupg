@@ -474,6 +474,7 @@ def _get_options_group(group=None):
                                    '--passphrase-fd',
                                    '--status-fd',
                                    '--verify-options',
+                                   '--search-keys',
                                ])
     #: These have their own parsers and don't really fit into a group
     other_options = frozenset(['--debug-level',
@@ -1364,3 +1365,29 @@ class ListPackets(object):
             pass
         else:
             raise ValueError("Unknown status message: %r" % key)
+
+class SearchKeys(object):
+    """Handle status messages for searching keys
+
+    :type gpg: :class:`gnupg.GPG`
+    :param gpg: An instance of :class:`gnupg.GPG`.
+    """
+
+    def __init__(self, gpg):
+        self._gpg = gpg
+
+    def __nonzero__(self):
+        """Override the determination for truthfulness evaluation.
+
+        :rtype: bool
+        :returns: True if the search found some keys, False otherwise.
+        """
+        pass # TODO
+    __bool__ = __nonzero__
+
+    def _handle_status(self, key, value):
+        """Parse a status code from the attached GnuPG process.
+
+        :raises: :exc:`ValueError` if the status message is unknown.
+        """
+        pass

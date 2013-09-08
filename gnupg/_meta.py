@@ -37,6 +37,9 @@ import psutil
 import subprocess
 import sys
 import threading
+import re
+import datetime
+import urllib
 
 from . import _parsers
 from . import _util
@@ -98,7 +101,8 @@ class GPGBase(object):
                        'list':     _parsers.ListKeys,
                        'sign':     _parsers.Sign,
                        'verify':   _parsers.Verify,
-                       'packets':  _parsers.ListPackets }
+                       'packets':  _parsers.ListPackets,
+                       'search':   _parsers.SearchKeys }
 
     def __init__(self, binary=None, home=None, keyring=None, secring=None,
                  use_agent=False, default_preference_list=None,
@@ -612,6 +616,89 @@ class GPGBase(object):
         self._collect_output(proc, result)
         log.debug('recv_keys result: %r', result.__dict__)
         return result
+
+    def _search_keys(self, names, keyserver=None):
+        """Search for keys on a keyserver.
+
+        Warning: keyservers may return short key ids, long key ids, or
+        fingerprints. This is determined by the keyserver, and, while the spec
+        recommends always returning the longest possible key identifier, it
+        appears most keyservers return short key ids.
+
+        :param str names: Each ``names`` argument should be string specifying
+            a user id (valid ways of describing user IDs are listed in the gpg man
+            page in the section "HOW TO SPECIFY A USER ID"). Multiple names are
+            joined to create the search string for the keyserver.
+        :param str keyserver: The keyserver to search for ``names`` on;
+            defaults to :property:`gnupg.GPG.keyserver`.
+        """
+        if not keyserver:
+            keyserver = self.keyserver
+
+        # Use --batch to get the search results without entering the
+        # interactive step
+        args = ['--batch', '--with-colons',
+                '--keyserver {}'.format(keyserver),
+                '--search-keys {}'.format(names)]
+        log.info('Searching for keys from %s: %s' % (keyserver, names))
+
+        result = self._result_map['search'](self)
+        p = self._open_subprocess(args)
+        # AFAICT there is no status to handle here... (garrettr)
+        # Get the search results from stdout
+        self._collect_output(p, result)
+        lines = result.data.decode(self._encoding,
+                                   self._decode_errors).splitlines()
+
+        # http://tools.ietf.org/html/rfc2440#section-9.1
+        PUBLIC_KEY_ALGORITHMS = {
+            1 : 'RSA (Encrypt or Sign)',
+            2 : 'RSA Encrypt-only',
+            3 : 'RSA Sign-only',
+            16 : 'Elgamal (Encrypt-only)',
+            17 : 'DSA (Digital Signature Standard)',
+            18 : 'Reserved for Elliptic Curve',
+            19 : 'Reserved for ECDSA',
+            20 : 'Elgamal (Encrypt or Sign)',
+            21 : 'Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)',
+        }
+        PUBLIC_KEY_ALGORITHMS.update(
+                dict.fromkeys(range(100,110),
+                              'Private/Experimental algorithm'))
+
+        def convert_date(date):
+            if date == '':
+                return None
+            return datetime.datetime.utcfromtimestamp(int(date))
+
+        keys = list()
+        for line in lines:
+            # Machine-readable keyserver index format:
+            # http://tools.ietf.org/html/draft-shaw-openpgp-hkp-00#section-5.2
+            fields = line.split(':')
+            if fields[0] == 'pub': # start of new key entry
+                keys.append(dict(
+                    keyid=fields[1],
+                    algo=PUBLIC_KEY_ALGORITHMS[int(fields[2])],
+                    keylen=int(fields[3]),
+                    creationdate=convert_date(fields[4]),
+                    expirationdate=convert_date(fields[5]),
+                    flags=fields[6] or None,
+                    uids=list(),
+                    ))
+            elif fields[0] == 'uid': # each key entry has at least one uid
+                keys[-1]['uids'].append(dict(
+                    uid=urllib.unquote(fields[1]),
+                    creationdate=convert_date(fields[2]),
+                    expirationdate=convert_date(fields[3]),
+                    flags=fields[4] or None,
+                    ))
+            else:
+                # may be optional 'info' line, or something we don't understand
+                continue
+
+        log.debug('search_keys result: %r', keys)
+        return keys
 
     def _sign_file(self, file, default_key=None, passphrase=None,
                    clearsign=True, detach=False, binary=False,
