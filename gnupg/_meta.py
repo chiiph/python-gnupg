@@ -37,9 +37,6 @@ import psutil
 import subprocess
 import sys
 import threading
-import re
-import datetime
-import urllib
 
 from . import _parsers
 from . import _util
@@ -644,61 +641,23 @@ class GPGBase(object):
 
         result = self._result_map['search'](self)
         p = self._open_subprocess(args)
-        # AFAICT there is no status to handle here... (garrettr)
+        # gpg --search-keys produces no status-fd (AFAICT)
         # Get the search results from stdout
         self._collect_output(p, result)
         lines = result.data.decode(self._encoding,
                                    self._decode_errors).splitlines()
-
-        # http://tools.ietf.org/html/rfc2440#section-9.1
-        PUBLIC_KEY_ALGORITHMS = {
-            1 : 'RSA (Encrypt or Sign)',
-            2 : 'RSA Encrypt-only',
-            3 : 'RSA Sign-only',
-            16 : 'Elgamal (Encrypt-only)',
-            17 : 'DSA (Digital Signature Standard)',
-            18 : 'Reserved for Elliptic Curve',
-            19 : 'Reserved for ECDSA',
-            20 : 'Elgamal (Encrypt or Sign)',
-            21 : 'Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)',
-        }
-        PUBLIC_KEY_ALGORITHMS.update(
-                dict.fromkeys(range(100,110),
-                              'Private/Experimental algorithm'))
-
-        def convert_date(date):
-            if date == '':
-                return None
-            return datetime.datetime.utcfromtimestamp(int(date))
-
-        keys = list()
+        valid_keywords = 'pub uid'.split()
         for line in lines:
-            # Machine-readable keyserver index format:
-            # http://tools.ietf.org/html/draft-shaw-openpgp-hkp-00#section-5.2
-            fields = line.split(':')
-            if fields[0] == 'pub': # start of new key entry
-                keys.append(dict(
-                    keyid=fields[1],
-                    algo=PUBLIC_KEY_ALGORITHMS[int(fields[2])],
-                    keylen=int(fields[3]),
-                    creationdate=convert_date(fields[4]),
-                    expirationdate=convert_date(fields[5]),
-                    flags=fields[6] or None,
-                    uids=list(),
-                    ))
-            elif fields[0] == 'uid': # each key entry has at least one uid
-                keys[-1]['uids'].append(dict(
-                    uid=urllib.unquote(fields[1]),
-                    creationdate=convert_date(fields[2]),
-                    expirationdate=convert_date(fields[3]),
-                    flags=fields[4] or None,
-                    ))
-            else:
-                # may be optional 'info' line, or something we don't understand
+            log.debug("%r", line.rstrip())
+            L = line.strip().split(':')
+            if not L:
                 continue
+            keyword = L[0]
+            if keyword in valid_keywords:
+                getattr(result, keyword)(L)
 
-        log.debug('search_keys result: %r', keys)
-        return keys
+        log.debug('search_keys result: %r', result)
+        return result
 
     def _sign_file(self, file, default_key=None, passphrase=None,
                    clearsign=True, detach=False, binary=False,
