@@ -7,12 +7,12 @@
 #           © 2008-2012 Vinay Sajip
 #           © 2005 Steve Traugott
 #           © 2004 A.M. Kuchling
-# 
+#
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
 # Software Foundation, either version 3 of the License, or (at your option)
 # any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful, but WITHOUT
 # ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 # FITNESS FOR A PARTICULAR PURPOSE. See the included LICENSE file for details.
@@ -75,15 +75,19 @@ class GPGMeta(type):
                   same effective user ID as that of this program. Otherwise,
                   returns None.
         """
-        identity = os.getresuid()
-        for proc in psutil.process_iter():
-            if (proc.name == "gpg-agent") and proc.is_running:
-                log.debug("Found gpg-agent process with pid %d" % proc.pid)
-                if proc.uids == identity:
-                    log.debug(
-                        "Effective UIDs of this process and gpg-agent match")
-                    setattr(cls, '_agent_proc', proc)
-                    return True
+        try:
+            identity = os.getresuid()
+            for proc in psutil.process_iter():
+                if (proc.name == "gpg-agent") and proc.is_running:
+                    log.debug("Found gpg-agent process with pid %d" % proc.pid)
+                    if proc.uids == identity:
+                        log.debug(
+                            "Effective UIDs of this process and gpg-agent match")
+                        setattr(cls, '_agent_proc', proc)
+                        return True
+        except Exception:
+            # Some OSs don't have getresuid
+            return False
 
 
 class GPGBase(object):
@@ -121,6 +125,8 @@ class GPGBase(object):
         encoding = locale.getpreferredencoding()
         if encoding is None: # This happens on Jython!
             encoding = sys.stdin.encoding
+        if encoding is None:
+            encoding = "UTF-8"
         self._encoding = encoding.lower().replace('-', '_')
         self._filesystemencoding = encodings.normalize_encoding(
             sys.getfilesystemencoding().lower())

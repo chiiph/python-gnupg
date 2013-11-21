@@ -270,6 +270,8 @@ def _find_binary(binary=None):
             except IndexError as ie:
                 log.info("Could not determine absolute path of binary: '%s'"
                           % binary)
+        else:
+            found = binary
     if found is None:
         try: found = _which('gpg')[0]
         except IndexError as ie:
