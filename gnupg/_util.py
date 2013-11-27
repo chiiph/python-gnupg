@@ -64,7 +64,7 @@ except NameError:
 #_here = getabsfile(currentframe()).rsplit(os.path.sep, 1)[0]
 _here = os.path.join(os.getcwd(), 'gnupg')                   ## current dir
 _test = os.path.join(os.path.join(_here, 'test'), 'tmp')     ## ./tests/tmp
-_user = os.environ.get('HOME')                               ## $HOME
+_user = os.path.expanduser("~") # os.environ.get('HOME')                               ## $HOME
 _ugpg = os.path.join(_user, '.gnupg')                        ## $HOME/.gnupg
 _conf = os.path.join(os.path.join(_user, '.config'), 'python-gnupg')
                                      ## $HOME/.config/python-gnupg

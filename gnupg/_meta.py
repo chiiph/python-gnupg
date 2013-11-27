@@ -338,7 +338,7 @@ class GPGBase(object):
                       % _util._conf)
             directory = _util._conf
 
-        hd = _parsers._fix_unsafe(directory)
+        hd = _parsers._fix_unsafe(directory).replace("'", "")
         log.debug("GPGBase._homedir_setter(): got directory '%s'" % hd)
 
         if hd:
@@ -433,7 +433,7 @@ class GPGBase(object):
                                 process.
         """
         ## see TODO file, tag :io:makeargs:
-        cmd = [self.binary,
+        cmd = ['"'+self.binary+'"',
                '--no-options --no-emit-version --no-tty --status-fd 2']
 
         if self.homedir: cmd.append('--homedir "%s"' % self.homedir)
